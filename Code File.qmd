@@ -1,0 +1,248 @@
+---
+title: "Exploring Mental Health Through Text Analysis: A Study on Depression and Anxiety in Reddit."
+format: html
+---
+
+```{python}
+import pandas as pd
+import importlib
+import seaborn as sns
+from wordcloud import WordCloud
+from collections import Counter
+import matplotlib.pyplot as plt
+
+from gensim.models.ldamodel import LdaModel
+from gensim.models import LdaModel
+from gensim.corpora import Dictionary
+
+from sklearn.decomposition import LatentDirichletAllocation, NMF
+from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
+
+import nltk
+from nltk.corpus import stopwords
+from nltk.tokenize import word_tokenize
+from nltk.sentiment.vader import SentimentIntensityAnalyzer
+from nltk.stem import WordNetLemmatizer
+
+import pyLDAvis
+import pyLDAvis.gensim_models as gensimvis
+
+nltk.download('stopwords')
+nltk.download('punkt')
+nltk.download('wordnet')
+nltk.download('vader_lexicon')
+
+```
+
+```{python}
+import melinita_nlp as ml
+importlib.reload(ml)
+```
+
+```{python}
+# Load your dataset from a TSV file
+df = pd.read_csv('data\\rspct.tsv', sep='\t')
+
+# Display the first few rows to understand the structure
+print(df.head())
+
+# List of mental health-related subreddits (this is an example, you should refine this list)
+mental_health_subreddits = [
+    'depression', 'anxiety', 'mentalhealth', 'suicidewatch', 'bipolar', 
+    'adhd', 'schizophrenia', 'OCD', 'ptsd', 'eatingdisorders', 'relationships', "teaching", 'meditation', 'fitness', "divorce", 'autism', 'addiction', 'antidepressants'
+]
+
+# Filter the dataset to include only the specified subreddits
+mental_health_df = df[df['subreddit'].isin(mental_health_subreddits)]
+
+# Display the number of posts in the new DataFrame
+print(f"Number of posts in mental health-related subreddits: {len(mental_health_df)}")
+
+# Display the first few rows of the filtered DataFrame to verify the filtering
+print(mental_health_df.head())
+
+mental_health_df.to_csv('data\\mental_health_posts.csv', index=False)
+```
+
+```{python}
+unique_values_subreddits = mental_health_df['subreddit'].unique()
+series = mental_health_df["selftext"]
+series_titles = mental_health_df["title"]
+mental_health_subreddits = mental_health_df["subreddit"]
+```
+
+
+```{python}
+# Tokens as lists of words
+preprocessed_text_as_tokens = ml.preprocess_series_of_texts_as_tokens(series)
+preprocessed_text_titles_as_tokens = ml.preprocess_series_of_texts_as_tokens(series_titles)
+print(preprocessed_text_as_tokens)
+print(preprocessed_text_titles_as_tokens)
+
+# Tokens as single string
+preprocessed_text = preprocessed_text_as_tokens.apply(" ".join)
+preprocessed_text_titles = preprocessed_text_titles_as_tokens.apply(" ".join)
+print(preprocessed_text)
+print(preprocessed_text_titles)
+```
+
+```{python}
+df_analysis = pd.DataFrame({
+    'titles_posts': preprocessed_text_titles,
+    'posts_content': preprocessed_text,
+    'subreddit': mental_health_subreddits
+})
+
+df_analysis.reset_index(drop=True, inplace=True)
+
+df_analysis
+```
+
+```{python}
+#Descriptive Statistics
+df_analysis['text_length'] = df_analysis['posts_content'].apply(len)
+text_length_stats = df_analysis['text_length'].describe()
+print(text_length_stats)
+
+word_counts = Counter(' '.join(df_analysis['posts_content']).split())
+most_common_words = word_counts.most_common(20)  # Get the top 20 most common words
+
+print("Most common words:", most_common_words)
+unique_word_count = len(word_counts)
+print("Unique word count:", unique_word_count)
+```
+
+```{python}
+# Visualizations Descriptive Statistics
+plt.hist(df_analysis['text_length'], bins=30, color='yellow', edgecolor='black')
+plt.xlabel('Text Length')
+plt.ylabel('Frequency')
+plt.title('Distribution of Text Length')
+plt.show()
+
+wordcloud = WordCloud(width=800, height=400, background_color='white').generate_from_frequencies(word_counts)
+plt.figure(figsize=(10, 6))
+plt.imshow(wordcloud, interpolation='bilinear')
+plt.axis('off')
+plt.title('Word Cloud of Most Common Words')
+plt.show()
+```
+```{python}
+# Extract words and their frequencies
+words, frequencies = zip(*most_common_words)
+
+# Plot bar chart
+plt.figure(figsize=(10, 6))
+plt.barh(words, frequencies, color='skyblue')
+plt.xlabel('Frequency')
+plt.ylabel('Words')
+plt.title('Most Common Words')
+plt.gca().invert_yaxis()  # To display the highest frequency word at the top
+plt.show()
+
+```
+```{python}
+sid = SentimentIntensityAnalyzer()
+
+# Perform sentiment analysis
+sentiment_scores = df_analysis['posts_content'].apply(lambda x: sid.polarity_scores(x)['compound'])
+
+# Calculate descriptive statistics
+sentiment_stats = sentiment_scores.describe()
+
+print(sentiment_stats)
+```
+
+```{python}
+stats = ['mean', 'std', 'min', '25%', '50%', '75%', 'max']
+values = [sentiment_stats[stat] for stat in stats]
+
+# Plotting bar plot of descriptive statistics
+plt.figure(figsize=(10, 6))
+bars = plt.bar(stats, values, color='orange', edgecolor='black')
+
+# Adding value labels on each bar
+for bar in bars:
+    yval = bar.get_height()
+    plt.text(bar.get_x() + bar.get_width()/2.0, yval, round(yval, 4), va='bottom', ha='center')
+
+plt.xlabel('Statistic')
+plt.ylabel('Value')
+plt.title('Descriptive Statistics of Sentiment Scores')
+plt.show()
+```
+
+# Sentiment Score Analysis
+
+```{python}
+# Initialize VADER
+sid = SentimentIntensityAnalyzer()
+
+# Apply sentiment analysis
+posts_sentiment = preprocessed_text.apply(lambda x: sid.polarity_scores(x))
+
+# Convert to DataFrame
+sentiment_df = pd.DataFrame(posts_sentiment.tolist())
+
+df_merged = pd.concat([df_analysis, sentiment_df], axis=1)
+df_merged
+```
+
+### General sentiment score
+
+```{python}
+print("General sentiment compound score:")
+print(df_merged['compound'].mean())
+```
+
+### Sentiment score by subreddit
+
+```{python}
+print("Subreddits Categories:", unique_values_subreddits)
+
+subreddits_compound_means = {}
+
+for subreddit in unique_values_subreddits:
+    this_subreddit_df = df_merged[df_merged['subreddit'] == subreddit]
+    subreddits_compound_means[subreddit] = this_subreddit_df['compound'].mean()
+    print("Subreddit '" + subreddit + "' sentiment compound score:")
+    print(this_subreddit_df['compound'].mean())
+    print()
+```
+
+
+# Topic Modeling
+```{python}
+num_topics = 5
+words_to_remove = ['lb', 'wa', 'ha', 'ca', 'w']
+```
+
+### General topic modeling (all subreddits together)
+```{python}
+preprocessed_text_as_tokens_series = pd.Series(ml.remove_this_words_from_token_list(words_to_remove, preprocessed_text_as_tokens.tolist()))
+
+ml.do_lda_model_with_graphs(preprocessed_text_as_tokens_series, num_topics)
+print()
+#TODO: Revisar si esta parte es necesaria. Este es el NMF model. TE AMO
+ml.do_nmf_vectorization_model(preprocessed_text_as_tokens_series, num_topics)
+```
+
+### Topic modeling by subreddit
+```{python}
+for subreddit in unique_values_subreddits.tolist():
+    this_subreddit_df = df_merged[df_merged['subreddit'] == subreddit]
+    
+    post_contents_as_lists = this_subreddit_df['posts_content'].apply(lambda x: x.split())
+
+    filtered_post_contents_as_series = pd.Series(ml.remove_this_words_from_token_list(words_to_remove, post_contents_as_lists))
+    
+    ml.do_lda_model_with_graphs(filtered_post_contents_as_series, num_topics, subreddit)
+    print()
+    #TODO: Revisar si esta parte es necesaria. Este es el NMF model. TE AMO
+    ml.do_nmf_vectorization_model(filtered_post_contents_as_series, num_topics)
+```
+
+```{python}
+#TODO: Revisar si esta parte es necesaria. Este es el NMF model. TE AMO
+ml.do_nmf_vectorization_model(preprocessed_text_as_tokens_series, num_topics)
+```
