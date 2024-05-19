@@ -223,7 +223,6 @@ preprocessed_text_as_tokens_series = pd.Series(ml.remove_this_words_from_token_l
 
 ml.do_lda_model_with_graphs(preprocessed_text_as_tokens_series, num_topics)
 print()
-#TODO: Revisar si esta parte es necesaria. Este es el NMF model. TE AMO
 ml.do_nmf_vectorization_model(preprocessed_text_as_tokens_series, num_topics)
 ```
 
@@ -238,11 +237,9 @@ for subreddit in unique_values_subreddits.tolist():
     
     ml.do_lda_model_with_graphs(filtered_post_contents_as_series, num_topics, subreddit)
     print()
-    #TODO: Revisar si esta parte es necesaria. Este es el NMF model. TE AMO
     ml.do_nmf_vectorization_model(filtered_post_contents_as_series, num_topics)
 ```
 
 ```{python}
-#TODO: Revisar si esta parte es necesaria. Este es el NMF model. TE AMO
 ml.do_nmf_vectorization_model(preprocessed_text_as_tokens_series, num_topics)
 ```
